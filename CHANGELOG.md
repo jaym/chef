@@ -4,6 +4,7 @@
 * [**Vasiliy Tolstov**](https://github.com/vtolstov):
   Reload systemd service only if it's running, otherwise start.
 
+* set no_lazy_load to true (CHEF-4961)
 * set file_stating_uses_destdir config option default to true (CHEF-5040)
 * remove dependency on rest-client gem
 * Add method shell_out_with_systems_locale to ShellOut.

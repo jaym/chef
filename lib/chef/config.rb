@@ -580,6 +580,13 @@ class Chef
     # the number of threads will help.
     default :cookbook_sync_threads, 10
 
+    # When this is false, cookbook files and templates will be loaded lazily when they
+    # are used.  When this is true, the cookbook contents are synchronized fully up front
+    # (possibly causing synchronization of files that will never be used).  The downside of
+    # lazy loading is that s3 credentials in urls may eventually time out, and many users
+    # find the lazy behaviour confusing.
+    default :no_lazy_load, true
+
     # A whitelisted array of attributes you want sent over the wire when node
     # data is saved.
     # The default setting is nil, which collects all data. Setting to [] will not
