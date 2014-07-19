@@ -34,6 +34,9 @@ class Chef::Application
   def initialize
     super
 
+    # FIXME: terse.  haven't had coffee.  should link to official announcement.
+    raise "Chef has dropped support for ruby 1.8.7" if RUBY_VERSION.to_f < 1.9
+
     @chef_client = nil
     @chef_client_json = nil
 
