@@ -1,5 +1,10 @@
 # Chef Client Release Notes:
 
+## When given an override run list Chef does not clean the file_cache
+
+In order to avoid redownloading the file_cache for all the cookbooks and files that are skipped when an
+override run list is used, when an override run list is set the file cache is not cleaned at all.
+
 ## Changed no_lazy_load config default to True
 
 Previously the default behavior of chef-client was lazily synchronize cookbook files and templates as
