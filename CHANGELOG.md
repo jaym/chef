@@ -4,6 +4,7 @@
 * [**Vasiliy Tolstov**](https://github.com/vtolstov):
   Reload systemd service only if it's running, otherwise start.
 
+* raise on ruby 1.8.7
 * do not clear file cache when override run list is set (CHEF-3684)
 * set no_lazy_load to true (CHEF-4961)
 * set file_stating_uses_destdir config option default to true (CHEF-5040)

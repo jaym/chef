@@ -1,5 +1,9 @@
 # Chef Client Release Notes:
 
+## Dropped Support For Ruby 1.8.7
+
+Ruby 1.8.7 is no longer supported.
+
 ## When given an override run list Chef does not clean the file_cache
 
 In order to avoid redownloading the file_cache for all the cookbooks and files that are skipped when an
