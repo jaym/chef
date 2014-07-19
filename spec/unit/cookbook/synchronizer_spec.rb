@@ -60,13 +60,29 @@ describe Chef::CookbookSynchronizer do
     }
   end
 
+  let(:cookbook_a_template) do
+    {
+      "path" => "templates/default/apache2.conf.erb",
+      "url" => "http://chef.example.com/ffffff",
+      "checksum" => "abc125",
+    }
+  end
+
+  let(:cookbook_a_file) do
+    {
+      "path" => "files/default/megaman.conf",
+      "url" => "http://chef.example.com/megaman.conf",
+      "checksum" => "abc124",
+    }
+  end
+
   let(:cookbook_a_manifest) do
     segments = [ :resources, :providers, :recipes, :definitions, :libraries, :attributes, :files, :templates, :root_files ]
     cookbook_a_manifest = segments.inject({}) {|h, segment| h[segment.to_s] = []; h}
     cookbook_a_manifest["recipes"] = [ cookbook_a_default_recipe ]
     cookbook_a_manifest["attributes"] = [ cookbook_a_default_attrs ]
-    cookbook_a_manifest["templates"] = [{"path" => "templates/default/apache2.conf.erb", "url" => "http://chef.example.com/ffffff"}]
-    cookbook_a_manifest["files"] = [{"path" => "files/default/megaman.conf", "url" => "http://chef.example.com/megaman.conf"}]
+    cookbook_a_manifest["templates"] = [ cookbook_a_template ]
+    cookbook_a_manifest["files"] = [ cookbook_a_file ]
     cookbook_a_manifest
   end
 
@@ -117,6 +133,227 @@ describe Chef::CookbookSynchronizer do
     end
   end
 
+  let(:cookbook_a_default_recipe_tempfile) do
+    double("Tempfile for cookbook_a default.rb recipe",
+           :path => "/tmp/cookbook_a_recipes_default_rb")
+  end
+
+  let(:cookbook_a_default_attribute_tempfile) do
+    double("Tempfile for cookbook_a default.rb attr file",
+           :path => "/tmp/cookbook_a_attributes_default_rb")
+  end
+
+  let(:cookbook_a_file_default_tempfile) do
+    double("Tempfile for cookbook_a megaman.conf file",
+           :path => "/tmp/cookbook_a_file_default_tempfile")
+  end
+
+  let(:cookbook_a_template_default_tempfile) do
+    double("Tempfile for cookbook_a apache.conf.erb template",
+           :path => "/tmp/cookbook_a_template_default_tempfile")
+  end
+
+  def setup_common_files_missing_expectations
+    # Files are not in the cache:
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/recipes/default.rb").
+      and_return(false)
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/attributes/default.rb").
+      and_return(false)
+
+    # Fetch and copy default.rb recipe
+    expect(server_api).to receive(:get_rest).
+      with('http://chef.example.com/abc123', true).
+      and_return(cookbook_a_default_recipe_tempfile)
+    expect(file_cache).to receive(:move_to).
+      with("/tmp/cookbook_a_recipes_default_rb", "cookbooks/cookbook_a/recipes/default.rb")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/recipes/default.rb", false).
+      and_return("/file-cache/cookbooks/cookbook_a/recipes/default.rb")
+
+    # Fetch and copy default.rb attribute file
+    expect(server_api).to receive(:get_rest).
+      with('http://chef.example.com/abc456', true).
+      and_return(cookbook_a_default_attribute_tempfile)
+    expect(file_cache).to receive(:move_to).
+      with("/tmp/cookbook_a_attributes_default_rb", "cookbooks/cookbook_a/attributes/default.rb")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/attributes/default.rb", false).
+      and_return("/file-cache/cookbooks/cookbook_a/attributes/default.rb")
+  end
+
+  def setup_no_lazy_files_and_templates_missing_expectations
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/files/default/megaman.conf").
+      and_return(false)
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/templates/default/apache2.conf.erb").
+      and_return(false)
+
+    expect(server_api).to receive(:get_rest).
+      with('http://chef.example.com/megaman.conf', true).
+      and_return(cookbook_a_file_default_tempfile)
+    expect(file_cache).to receive(:move_to).
+      with("/tmp/cookbook_a_file_default_tempfile", "cookbooks/cookbook_a/files/default/megaman.conf")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/files/default/megaman.conf", false).
+      and_return("/file-cache/cookbooks/cookbook_a/default/megaman.conf")
+
+    expect(server_api).to receive(:get_rest).
+      with('http://chef.example.com/ffffff', true).
+      and_return(cookbook_a_template_default_tempfile)
+    expect(file_cache).to receive(:move_to).
+      with("/tmp/cookbook_a_template_default_tempfile", "cookbooks/cookbook_a/templates/default/apache2.conf.erb")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/templates/default/apache2.conf.erb", false).
+      and_return("/file-cache/cookbooks/cookbook_a/templates/default/apache2.conf.erb")
+  end
+
+  def setup_common_files_chksum_mismatch_expectations
+    # Files are in the cache:
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/recipes/default.rb").
+      and_return(true)
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/attributes/default.rb").
+      and_return(true)
+
+    # Fetch and copy default.rb recipe
+    expect(server_api).to receive(:get_rest).
+      with('http://chef.example.com/abc123', true).
+      and_return(cookbook_a_default_recipe_tempfile)
+    expect(file_cache).to receive(:move_to).
+      with("/tmp/cookbook_a_recipes_default_rb", "cookbooks/cookbook_a/recipes/default.rb")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/recipes/default.rb", false).
+      twice.
+      and_return("/file-cache/cookbooks/cookbook_a/recipes/default.rb")
+
+    # Current file has fff000, want abc123
+    expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
+      with("/file-cache/cookbooks/cookbook_a/recipes/default.rb").
+      and_return("fff000")
+
+    # Fetch and copy default.rb attribute file
+    expect(server_api).to receive(:get_rest).
+      with('http://chef.example.com/abc456', true).
+      and_return(cookbook_a_default_attribute_tempfile)
+    expect(file_cache).to receive(:move_to).
+      with("/tmp/cookbook_a_attributes_default_rb", "cookbooks/cookbook_a/attributes/default.rb")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/attributes/default.rb", false).
+      twice.
+      and_return("/file-cache/cookbooks/cookbook_a/attributes/default.rb")
+
+    # Current file has fff000, want abc456
+    expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
+      with("/file-cache/cookbooks/cookbook_a/attributes/default.rb").
+      and_return("fff000")
+  end
+
+  def setup_no_lazy_files_and_templates_chksum_mismatch_expectations
+    # Files are in the cache:
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/files/default/megaman.conf").
+      and_return(true)
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/templates/default/apache2.conf.erb").
+      and_return(true)
+
+    # Fetch and copy megaman.conf
+    expect(server_api).to receive(:get_rest).
+      with('http://chef.example.com/megaman.conf', true).
+      and_return(cookbook_a_file_default_tempfile)
+    expect(file_cache).to receive(:move_to).
+      with("/tmp/cookbook_a_file_default_tempfile", "cookbooks/cookbook_a/files/default/megaman.conf")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/files/default/megaman.conf", false).
+      twice.
+      and_return("/file-cache/cookbooks/cookbook_a/default/megaman.conf")
+
+    # Fetch and copy apache2.conf template
+    expect(server_api).to receive(:get_rest).
+      with('http://chef.example.com/ffffff', true).
+      and_return(cookbook_a_template_default_tempfile)
+    expect(file_cache).to receive(:move_to).
+      with("/tmp/cookbook_a_template_default_tempfile", "cookbooks/cookbook_a/templates/default/apache2.conf.erb")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/templates/default/apache2.conf.erb", false).
+      twice.
+      and_return("/file-cache/cookbooks/cookbook_a/templates/default/apache2.conf.erb")
+
+    # Current file has fff000
+    expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
+      with("/file-cache/cookbooks/cookbook_a/default/megaman.conf").
+      and_return("fff000")
+
+    # Current file has fff000
+    expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
+      with("/file-cache/cookbooks/cookbook_a/templates/default/apache2.conf.erb").
+      and_return("fff000")
+  end
+
+  def setup_common_files_present_expectations
+    # Files are in the cache:
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/recipes/default.rb").
+      and_return(true)
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/attributes/default.rb").
+      and_return(true)
+
+    # Current file has abc123, want abc123
+    expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
+      with("/file-cache/cookbooks/cookbook_a/recipes/default.rb").
+      and_return("abc123")
+
+    # Current file has abc456, want abc456
+    expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
+      with("/file-cache/cookbooks/cookbook_a/attributes/default.rb").
+      and_return("abc456")
+
+    # :load called twice
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/recipes/default.rb", false).
+      twice.
+      and_return("/file-cache/cookbooks/cookbook_a/recipes/default.rb")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/attributes/default.rb", false).
+      twice.
+      and_return("/file-cache/cookbooks/cookbook_a/attributes/default.rb")
+  end
+
+  def setup_no_lazy_files_and_templates_present_expectations
+    # Files are in the cache:
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/files/default/megaman.conf").
+      and_return(true)
+    expect(file_cache).to receive(:has_key?).
+      with("cookbooks/cookbook_a/templates/default/apache2.conf.erb").
+      and_return(true)
+
+    # Current file has abc124, want abc124
+    expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
+      with("/file-cache/cookbooks/cookbook_a/default/megaman.conf").
+      and_return("abc124")
+
+    # Current file has abc125, want abc125
+    expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
+      with("/file-cache/cookbooks/cookbook_a/templates/default/apache2.conf.erb").
+      and_return("abc125")
+
+    # :load called twice
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/files/default/megaman.conf", false).
+      twice.
+      and_return("/file-cache/cookbooks/cookbook_a/default/megaman.conf")
+    expect(file_cache).to receive(:load).
+      with("cookbooks/cookbook_a/templates/default/apache2.conf.erb", false).
+      twice.
+      and_return("/file-cache/cookbooks/cookbook_a/templates/default/apache2.conf.erb")
+  end
+
   describe "when syncing cookbooks with the server" do
     let(:server_api) { double("Chef::REST (mock)") }
 
@@ -128,190 +365,96 @@ describe Chef::CookbookSynchronizer do
       allow(synchronizer).to receive(:clear_obsoleted_cookbooks)
       allow(synchronizer).to receive(:server_api).and_return(server_api)
       allow(synchronizer).to receive(:cache).and_return(file_cache)
-
-
-      @cookbook_a_default_recipe_tempfile = double("Tempfile for cookbook_a default.rb recipe",
-                                                 :path => "/tmp/cookbook_a_recipes_default_rb")
-
-      @cookbook_a_default_attribute_tempfile = double("Tempfile for cookbook_a default.rb attr file",
-                                                 :path => "/tmp/cookbook_a_attributes_default_rb")
     end
 
     context "when the cache does not contain the desired files" do
-      let(:no_lazy_load) { false }
-
       before do
-        # Files are not in the cache:
-        expect(file_cache).to receive(:has_key?).
-          with("cookbooks/cookbook_a/recipes/default.rb").
-          and_return(false)
-        expect(file_cache).to receive(:has_key?).
-          with("cookbooks/cookbook_a/attributes/default.rb").
-          and_return(false)
-
-        # Fetch and copy default.rb recipe
-        expect(server_api).to receive(:get_rest).
-          with('http://chef.example.com/abc123', true).
-          and_return(@cookbook_a_default_recipe_tempfile)
-        expect(file_cache).to receive(:move_to).
-          with("/tmp/cookbook_a_recipes_default_rb", "cookbooks/cookbook_a/recipes/default.rb")
-        expect(file_cache).to receive(:load).
-          with("cookbooks/cookbook_a/recipes/default.rb", false).
-          and_return("/file-cache/cookbooks/cookbook_a/recipes/default.rb")
-
-        # Fetch and copy default.rb attribute file
-        expect(server_api).to receive(:get_rest).
-          with('http://chef.example.com/abc456', true).
-          and_return(@cookbook_a_default_attribute_tempfile)
-        expect(file_cache).to receive(:move_to).
-          with("/tmp/cookbook_a_attributes_default_rb", "cookbooks/cookbook_a/attributes/default.rb")
-        expect(file_cache).to receive(:load).
-          with("cookbooks/cookbook_a/attributes/default.rb", false).
-          and_return("/file-cache/cookbooks/cookbook_a/attributes/default.rb")
+        setup_common_files_missing_expectations
       end
 
-      it "fetches eagerly loaded files" do
-        synchronizer.sync_cookbooks
-      end
+      context "Chef::Config[:no_lazy_load] is false" do
+        let(:no_lazy_load) { false }
 
-      it "does not fetch templates or cookbook files" do
-        # Implicitly tested in previous test; this test is just for behavior specification.
-        expect(server_api).not_to receive(:get_rest).
-          with('http://chef.example.com/ffffff', true)
+        it "fetches eagerly loaded files" do
+          synchronizer.sync_cookbooks
+        end
 
-        synchronizer.sync_cookbooks
+        it "does not fetch templates or cookbook files" do
+          # Implicitly tested in previous test; this test is just for behavior specification.
+          expect(server_api).not_to receive(:get_rest).
+            with('http://chef.example.com/ffffff', true)
+
+          synchronizer.sync_cookbooks
+        end
       end
 
       context "Chef::Config[:no_lazy_load] is true" do
         let(:no_lazy_load) { true }
 
         before do
-          @cookbook_a_file_default_tempfile = double("Tempfile for cookbook_a megaman.conf file",
-                                                     :path => "/tmp/cookbook_a_file_default_tempfile")
-          @cookbook_a_template_default_tempfile = double("Tempfile for cookbook_a apache.conf.erb template",
-                                                     :path => "/tmp/cookbook_a_template_default_tempfile")
+          setup_no_lazy_files_and_templates_missing_expectations
         end
 
         it "fetches templates and cookbook files" do
-          expect(file_cache).to receive(:has_key?).
-            with("cookbooks/cookbook_a/files/default/megaman.conf").
-            and_return(false)
-          expect(file_cache).to receive(:has_key?).
-            with("cookbooks/cookbook_a/templates/default/apache2.conf.erb").
-            and_return(false)
-
-          expect(server_api).to receive(:get_rest).
-            with('http://chef.example.com/megaman.conf', true).
-            and_return(@cookbook_a_file_default_tempfile)
-          expect(file_cache).to receive(:move_to).
-            with("/tmp/cookbook_a_file_default_tempfile", "cookbooks/cookbook_a/files/default/megaman.conf")
-          expect(file_cache).to receive(:load).
-            with("cookbooks/cookbook_a/files/default/megaman.conf", false).
-            and_return("/file-cache/cookbooks/cookbook_a/default/megaman.conf")
-
-          expect(server_api).to receive(:get_rest).
-            with('http://chef.example.com/ffffff', true).
-            and_return(@cookbook_a_template_default_tempfile)
-          expect(file_cache).to receive(:move_to).
-            with("/tmp/cookbook_a_template_default_tempfile", "cookbooks/cookbook_a/templates/default/apache2.conf.erb")
-          expect(file_cache).to receive(:load).
-            with("cookbooks/cookbook_a/templates/default/apache2.conf.erb", false).
-            and_return("/file-cache/cookbooks/cookbook_a/templates/default/apache2.conf.erb")
-
           synchronizer.sync_cookbooks
         end
       end
     end
 
     context "when the cache contains outdated files" do
-      let(:no_lazy_load) { false }
       before do
-        # Files are in the cache:
-        expect(file_cache).to receive(:has_key?).
-          with("cookbooks/cookbook_a/recipes/default.rb").
-          and_return(true)
-        expect(file_cache).to receive(:has_key?).
-          with("cookbooks/cookbook_a/attributes/default.rb").
-          and_return(true)
-
-
-        # Fetch and copy default.rb recipe
-        expect(server_api).to receive(:get_rest).
-          with('http://chef.example.com/abc123', true).
-          and_return(@cookbook_a_default_recipe_tempfile)
-        expect(file_cache).to receive(:move_to).
-          with("/tmp/cookbook_a_recipes_default_rb", "cookbooks/cookbook_a/recipes/default.rb")
-        expect(file_cache).to receive(:load).
-          with("cookbooks/cookbook_a/recipes/default.rb", false).
-          twice.
-          and_return("/file-cache/cookbooks/cookbook_a/recipes/default.rb")
-
-        # Current file has fff000, want abc123
-        expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
-          with("/file-cache/cookbooks/cookbook_a/recipes/default.rb").
-          and_return("fff000")
-
-        # Fetch and copy default.rb attribute file
-        expect(server_api).to receive(:get_rest).
-          with('http://chef.example.com/abc456', true).
-          and_return(@cookbook_a_default_attribute_tempfile)
-        expect(file_cache).to receive(:move_to).
-          with("/tmp/cookbook_a_attributes_default_rb", "cookbooks/cookbook_a/attributes/default.rb")
-        expect(file_cache).to receive(:load).
-          with("cookbooks/cookbook_a/attributes/default.rb", false).
-          twice.
-          and_return("/file-cache/cookbooks/cookbook_a/attributes/default.rb")
-
-        # Current file has fff000, want abc456
-        expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
-          with("/file-cache/cookbooks/cookbook_a/attributes/default.rb").
-          and_return("fff000")
+        setup_common_files_chksum_mismatch_expectations
       end
 
-      it "updates the outdated files" do
-        synchronizer.sync_cookbooks
+      context "Chef::Config[:no_lazy_load] is true" do
+        let(:no_lazy_load) { true }
+
+        before do
+          setup_no_lazy_files_and_templates_chksum_mismatch_expectations
+        end
+
+        it "updates the outdated files" do
+          synchronizer.sync_cookbooks
+        end
+      end
+
+      context "Chef::Config[:no_lazy_load] is false" do
+        let(:no_lazy_load) { false }
+
+        it "updates the outdated files" do
+          synchronizer.sync_cookbooks
+        end
       end
     end
 
     context "when the cache is up to date" do
-      let(:no_lazy_load) { false }
-
       before do
-        # Files are in the cache:
-        expect(file_cache).to receive(:has_key?).
-          with("cookbooks/cookbook_a/recipes/default.rb").
-          and_return(true)
-        expect(file_cache).to receive(:has_key?).
-          with("cookbooks/cookbook_a/attributes/default.rb").
-          and_return(true)
-
-        # Current file has abc123, want abc123
-        expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
-          with("/file-cache/cookbooks/cookbook_a/recipes/default.rb").
-          and_return("abc123")
-
-        # Current file has abc456, want abc456
-        expect(Chef::CookbookVersion).to receive(:checksum_cookbook_file).
-          with("/file-cache/cookbooks/cookbook_a/attributes/default.rb").
-          and_return("abc456")
-
-        expect(file_cache).to receive(:load).
-          with("cookbooks/cookbook_a/recipes/default.rb", false).
-          twice.
-          and_return("/file-cache/cookbooks/cookbook_a/recipes/default.rb")
-
-        expect(file_cache).to receive(:load).
-          with("cookbooks/cookbook_a/attributes/default.rb", false).
-          twice.
-          and_return("/file-cache/cookbooks/cookbook_a/attributes/default.rb")
+        setup_common_files_present_expectations
       end
 
-      it "does not update files" do
-        expect(file_cache).not_to receive(:move_to)
-        expect(server_api).not_to receive(:get_rest)
-        synchronizer.sync_cookbooks
+      context "Chef::Config[:no_lazy_load] is true" do
+        let(:no_lazy_load) { true }
+
+        before do
+          setup_no_lazy_files_and_templates_present_expectations
+        end
+
+        it "does not update files" do
+          expect(file_cache).not_to receive(:move_to)
+          expect(server_api).not_to receive(:get_rest)
+          synchronizer.sync_cookbooks
+        end
       end
 
+      context "Chef::Config[:no_lazy_load] is false" do
+        let(:no_lazy_load) { false }
+
+        it "does not update files" do
+          expect(file_cache).not_to receive(:move_to)
+          expect(server_api).not_to receive(:get_rest)
+          synchronizer.sync_cookbooks
+        end
+      end
     end
   end
 end
