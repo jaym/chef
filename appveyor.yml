@@ -13,8 +13,7 @@ clone_depth: 1
 skip_tags: true
 branches:
   only:
-    - master
-    - 12-stable
+    - jdm/appveyor
 
 install:
   - winrm quickconfig -q
